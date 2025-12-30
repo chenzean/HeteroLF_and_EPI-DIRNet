@@ -464,9 +464,7 @@ class Intra_SA_LF_Parallel(nn.Module):
             self.v = Intra_EPI_Transformer(dim)
 
         else:  # Weight shared
-            self.v = self.h = Intra_EPI_Transformer(dim, dim * 2)
-
-            self.v.mask_field = self.h.mask_field = [self.angRes * 2, 11]
+            self.v = self.h = Intra_EPI_Transformer(dim)
 
         if fusion == 'EPIFG':
             self.epi_fusion = EPIFG(dim)
