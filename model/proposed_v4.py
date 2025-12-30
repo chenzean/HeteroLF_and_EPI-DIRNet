@@ -766,10 +766,6 @@ class get_model(nn.Module):
         self.angRes = args.angRes
         self.channels = args.channels
 
-        # Ablation configurations
-        self.inr_model = 'LF_INR'  # 'LF_INR' or 'Conv'
-        self.use_confidence_fusion = True
-
         # Initial Feature Extraction
         self.Conv_init1 = nn.Sequential(
             nn.PixelUnshuffle(2),
