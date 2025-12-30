@@ -725,17 +725,6 @@ class Fusion_Block(nn.Module):
         x_1, x_2 = warping_fea.chunk(2, dim=1)
 
         x_ = rearrange(x_1, '(b a1 a2) c h w -> b c a1 a2 h w', a1=self.args.angRes, a2=self.args.angRes, h=h, w=w)
-        x_temp = rearrange(x_, 'b c a1 a2 h w -> b c (a1 a2) h w', a1=self.args.angRes, a2=self.args.angRes, h=h, w=w)
-
-        # Position Encoding logic for LFT
-        if self.model_type == 'LFT_and_EPIConv' and self.pos_encoding is not None:
-            spa_position = self.pos_encoding(x_temp, dim=[3, 4], token_dim=self.channels)
-            ang_position = self.pos_encoding(x_temp, dim=[2], token_dim=self.channels)
-            for m in self.modules():
-                if hasattr(m, 'h'): m.h = 32
-                if hasattr(m, 'w'): m.w = 32
-                if hasattr(m, 'spa_position'): m.spa_position = spa_position
-                if hasattr(m, 'ang_position'): m.ang_position = ang_position
 
         # Global feature
         x1 = self.epi_block1(x_)
