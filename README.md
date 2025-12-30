@@ -22,7 +22,7 @@
 
 ## 📚 Dataset Generation
 
-![image-20251230234516282](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20251230234516282.png)
+![Dataset Generation](/assets/Dataset_Generation.png)
 
 ## 📬 Contact
 
