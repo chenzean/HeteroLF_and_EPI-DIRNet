@@ -21,10 +21,6 @@ from lpips import LPIPS
 # Ensure these modules exist in your project structure
 from loss import ReconstructionLoss, DetailLoss
 from model.LF_INR import INR as LF_INR
-from model.LFT import AltFilter as LFT_AltFilter
-from model.LFT import PositionEncoding
-from model.EPIT import AltFilter as EPIT_AltFilter
-from model.SAV import SAV_parallel, SAS_conv
 import einops
 
 
@@ -708,48 +704,17 @@ class Fusion_Block(nn.Module):
         self.args = args
         self.channels = hidden_dim // 2
 
-        self.fusion_type = 'cross_attention'  # 'cross_attention' or 'cat'
-        self.model_type = 'proposed'  # 'LF_former_and_SAS', 'LF_former_and_SAV', 'EPIT_and_EPIConv', 'LFT_and_EPIConv', 'proposed'
 
         # Feature Alignment
-        if self.fusion_type == 'cross_attention':
-            self.cross_fusion = TransformerBlock(hidden_dim)
-        elif self.fusion_type == 'cat':
-            self.cross_fusion = nn.Sequential(
-                nn.Conv2d(hidden_dim * 2, hidden_dim, 1),
-                nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(hidden_dim, hidden_dim, 3, 1, 1),
-            )
-        else:
-            raise ValueError(f"Unknown fusion type: {self.fusion_type}")
+        self.cross_fusion = TransformerBlock(hidden_dim)
 
         # Global and Local feature extraction configuration
         self.pos_encoding = None
 
-        if self.model_type == 'LF_former_and_SAS':
-            self.epi_block1 = nn.Sequential(LF_former(args, hidden_dim // 2))
-            self.local_conv1 = nn.Sequential(SAS_conv(hidden_dim // 2), SAS_conv(hidden_dim // 2))
-            self.pos_encoding = PositionEncoding(temperature=10000)
 
-        elif self.model_type == 'LF_former_and_SAV':
-            self.epi_block1 = nn.Sequential(LF_former(args, hidden_dim // 2))
-            self.local_conv1 = nn.Sequential(SAV_parallel(hidden_dim // 2), SAV_parallel(hidden_dim // 2))
+        self.epi_block1 = nn.Sequential(LF_former(args, hidden_dim // 2))
+        self.local_conv1 = nn.Sequential(DirectionalEPIBlock(hidden_dim // 2), DirectionalEPIBlock(hidden_dim // 2))
 
-        elif self.model_type == 'EPIT_and_EPIConv':
-            self.epi_block1 = nn.Sequential(EPIT_AltFilter(args.angRes, hidden_dim // 2))
-            self.local_conv1 = nn.Sequential(DirectionalEPIBlock(hidden_dim // 2), DirectionalEPIBlock(hidden_dim // 2))
-
-        elif self.model_type == 'LFT_and_EPIConv':
-            self.epi_block1 = nn.Sequential(LFT_AltFilter(args.angRes, hidden_dim // 2))
-            self.local_conv1 = nn.Sequential(DirectionalEPIBlock(hidden_dim // 2), DirectionalEPIBlock(hidden_dim // 2))
-            self.pos_encoding = PositionEncoding(temperature=10000)
-
-        elif self.model_type == 'proposed':
-            self.epi_block1 = nn.Sequential(LF_former(args, hidden_dim // 2))
-            self.local_conv1 = nn.Sequential(DirectionalEPIBlock(hidden_dim // 2), DirectionalEPIBlock(hidden_dim // 2))
-
-        else:
-            raise ValueError(f"Unknown model type: {self.model_type}")
 
         self.conv_RB = ResidualBlock(hidden_dim)
 
@@ -757,10 +722,7 @@ class Fusion_Block(nn.Module):
         b, c, h, w = warp.shape
 
         # Feature alignment
-        if self.fusion_type == 'cross_attention':
-            warping_fea = self.cross_fusion(warp, ref)
-        else:
-            warping_fea = self.cross_fusion(torch.cat([warp, ref], dim=1))
+        warping_fea = self.cross_fusion(warp, ref)
 
         x_1, x_2 = warping_fea.chunk(2, dim=1)
 
@@ -845,22 +807,9 @@ class get_model(nn.Module):
         )
 
         # Reconstruction & INR
-        if self.inr_model == 'LF_INR':
-            self.Rec_Block = LF_INR(args, local_ensemble=True, feat_unfold=True, cell_decode=True)
-        elif self.inr_model == 'Conv':
-            self.Rec_Block = nn.Sequential(
-                nn.Conv2d(self.channels, self.channels, 3, 1, 1),
-                nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(self.channels, self.channels, 3, 1, 1),
-                nn.LeakyReLU(0.1, inplace=True),
-                nn.Conv2d(self.channels, 12, 3, 1, 1),
-                nn.PixelShuffle(2),
-            )
-        else:
-            raise ValueError(f"Unknown INR model type: {self.inr_model}")
+        self.Rec_Block = LF_INR(args, local_ensemble=True, feat_unfold=True, cell_decode=True)
 
-        if self.use_confidence_fusion:
-            self.mask_block = ConfidenceFusion(9, self.channels)
+        self.mask_block = ConfidenceFusion(9, self.channels)
 
     def forward(self, warping_Light_Field, reference_Light_Field):
         # Reshape Inputs
@@ -884,29 +833,18 @@ class get_model(nn.Module):
         fea = self.compress(fea_dense)
 
         # Implicit Reconstruction
-        if self.inr_model == 'LF_INR':
-            fea = rearrange(fea, '(b an1 an2) c h w -> b c an1 an2 h w',
-                            an1=self.angRes, an2=self.angRes)
-            res = self.Rec_Block(fea)
-            rec = rearrange(res, 'b c an1 an2 h w -> (b an1 an2) c h w',
-                            an1=self.angRes, an2=self.angRes)
-        elif self.inr_model == 'Conv':
-            rec = self.Rec_Block(fea)
-        else:
-            rec = fea  # fallback
+        fea = rearrange(fea, '(b an1 an2) c h w -> b c an1 an2 h w',
+                        an1=self.angRes, an2=self.angRes)
+        res = self.Rec_Block(fea)
+        rec = rearrange(res, 'b c an1 an2 h w -> (b an1 an2) c h w',
+                        an1=self.angRes, an2=self.angRes)
 
-        # Confidence Fusion
-        if self.use_confidence_fusion:
-            out = self.mask_block(rec, warp)
-            out = rearrange(out, '(b an1 an2) c h w -> b c (an1 h) (an2 w)',
-                            an1=self.angRes, an2=self.angRes)
-            rec = rearrange(rec, '(b an1 an2) c h w -> b c (an1 h) (an2 w)',
-                            an1=self.angRes, an2=self.angRes)
-            return rec, out
-        else:
-            out = rearrange(rec, '(b an1 an2) c h w -> b c (an1 h) (an2 w)',
-                            an1=self.angRes, an2=self.angRes) + warp
-            return out
+        out = self.mask_block(rec, warp)
+        out = rearrange(out, '(b an1 an2) c h w -> b c (an1 h) (an2 w)',
+                        an1=self.angRes, an2=self.angRes)
+        rec = rearrange(rec, '(b an1 an2) c h w -> b c (an1 h) (an2 w)',
+                        an1=self.angRes, an2=self.angRes)
+        return rec, out
 
 
 # ###############################################################################
