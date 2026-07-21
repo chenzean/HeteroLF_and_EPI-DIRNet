@@ -1,6 +1,6 @@
 #  HeteroLF & EPI-DIRNet
 
-> ⚠️ **Note:** The **Full code**, and **dataset** will be released **after the paper is accepted**.
+> ✅ **Note:** The **complete code**, **trained weights**, **dataset**, and the **results from various methods** are now all available. See [Usage](#-usage) for training/testing commands and [Download](#-download) for the dataset and weights.
 >
 >  Thank you for your patience and interest!
 >
@@ -10,19 +10,69 @@
 
 ## 🚩 **New Features/Updates**
 
+- ✅ July 21, 2026. Release the complete code (training & testing) and the trained weights
+- ✅ July 21, 2026. Release the HeteroLF Dataset and the results from various methods
 - ✅ December 30, 2025. Release the testing code
 - ✅ December 10, 2025. Create the repository
 
 
 
-### ⚡ **To do**
-
-- Release the training/test code and pre-trained model.
-- Release the HeteroLF Dataset
-
 ## 📚 Dataset Generation
 
 ![Dataset Generation](/assets/Dataset_Generation.png)
+
+## 🛠️ Usage
+
+All hyper-parameters are defined in [`config.py`](config.py) and can be overridden from the command line.
+
+### Data Preparation
+
+Download the dataset and trained weights from the [Download](#-download) link, then organize them as follows:
+
+```
+HeteroLF_and_EPI-DIRNet
+├── Dataset_full_LF
+│   ├── train_data_full_image
+│   ├── val_data
+│   └── test_data
+└── pretrain
+    └── best_model.pth
+```
+
+### Training
+
+```bash
+python train.py \
+    --model_name proposed_v4 \
+    --angRes 7 \
+    --batch_size 1 \
+    --epoch 500 \
+    --lr 2e-4 \
+    --path_for_train ./Dataset_full_LF/train_data_full_image/ \
+    --path_for_val ./Dataset_full_LF/val_data/ \
+    --device cuda:0
+```
+
+To train from scratch (without loading a checkpoint), add `--use_pre_ckpt ''`. To resume from / fine-tune a checkpoint, point `--path_pre_pth` to the `.pth` file. Checkpoints and logs are saved under `./log/`.
+
+### Testing
+
+```bash
+python test.py \
+    --model_name proposed_v4 \
+    --angRes 7 \
+    --path_pre_pth ./pretrain/best_model.pth \
+    --path_for_test ./Dataset_full_LF/test_data/ \
+    --device cuda:0
+```
+
+Quantitative results (PSNR/SSIM) are written to `evaluation.xls` / `evaluation_allviews.xls`, and the reconstructed views are saved under the result directory when `--save_output True`.
+
+## 📥 Download
+
+The dataset and the results from various methods are available at the following link:
+
+- **Baidu Netdisk:** [https://pan.baidu.com/s/1mll65kvDU5DWglyRkp06qA](https://pan.baidu.com/s/1mll65kvDU5DWglyRkp06qA) (Extraction code: `w93a`)
 
 ## 📬 Contact
 
